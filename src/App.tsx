@@ -29,7 +29,7 @@ import {
   handleFirestoreError,
   OperationType
 } from './firebase';
-import { Transaction, MonthlyBudget, MonthSummary, TransactionType } from './types';
+import { Transaction, MonthlyBudget, MonthSummary, TransactionType, AppUser } from './types';
 import { Navbar } from './components/Navbar';
 import { LoginView } from './components/LoginView';
 import { MonthlyOverview } from './components/MonthlyOverview';
@@ -38,10 +38,10 @@ import { TransactionList } from './components/TransactionList';
 import { TransactionModal } from './components/TransactionModal';
 import { BudgetModal } from './components/BudgetModal';
 import { ToastContainer, ToastMessage } from './components/Toast';
-import { Sparkles, Database, PlusCircle } from 'lucide-react';
+import { Sparkles, Database, PlusCircle, RefreshCw, Zap } from 'lucide-react';
 
 export default function App() {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | AppUser | null>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
   const [authErrorCode, setAuthErrorCode] = useState<string | null>(null);
@@ -85,13 +85,27 @@ export default function App() {
   // 2. Auth listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
+      if (currentUser) {
+        setUser(currentUser);
+        localStorage.removeItem('monydb_local_user');
+      } else {
+        const saved = localStorage.getItem('monydb_local_user');
+        if (saved) {
+          try {
+            setUser(JSON.parse(saved));
+          } catch {
+            setUser(null);
+          }
+        } else {
+          setUser(null);
+        }
+      }
       setLoadingAuth(false);
     });
     return () => unsubscribe();
   }, []);
 
-  // 3. Transactions Listener
+  // 3. Transactions Listener / Loader
   useEffect(() => {
     if (!user) {
       setTransactions([]);
@@ -99,6 +113,24 @@ export default function App() {
       return;
     }
 
+    // A) If user is in Local Mode
+    if ('isLocal' in user && user.isLocal) {
+      setLoadingData(true);
+      const stored = localStorage.getItem(`monydb_tx_${user.uid}`);
+      if (stored) {
+        try {
+          setTransactions(JSON.parse(stored));
+        } catch {
+          setTransactions([]);
+        }
+      } else {
+        setTransactions([]);
+      }
+      setLoadingData(false);
+      return;
+    }
+
+    // B) If user is authenticated via Firebase
     setLoadingData(true);
     const txPath = `users/${user.uid}/transactions`;
     const q = query(collection(db, 'users', user.uid, 'transactions'), orderBy('date', 'desc'));
@@ -133,13 +165,29 @@ export default function App() {
     return () => unsubscribe();
   }, [user]);
 
-  // 4. Monthly Budget Listener
+  // 4. Monthly Budget Listener / Loader
   useEffect(() => {
     if (!user) {
       setBudget(null);
       return;
     }
 
+    // A) If user is in Local Mode
+    if ('isLocal' in user && user.isLocal) {
+      const stored = localStorage.getItem(`monydb_budget_${user.uid}_${selectedMonth}`);
+      if (stored) {
+        try {
+          setBudget(JSON.parse(stored));
+        } catch {
+          setBudget(null);
+        }
+      } else {
+        setBudget(null);
+      }
+      return;
+    }
+
+    // B) If user is authenticated via Firebase
     const budgetPath = `users/${user.uid}/budgets/${selectedMonth}`;
     const budgetDocRef = doc(db, 'users', user.uid, 'budgets', selectedMonth);
 
@@ -201,12 +249,12 @@ export default function App() {
       catMap[tx.category].count += 1;
 
       // Daily breakdown
-      const day = parseInt(tx.date.split('-')[2], 10);
-      if (dailyMap[day]) {
+      const txDay = parseInt(tx.date.split('-')[2], 10);
+      if (dailyMap[txDay]) {
         if (tx.type === 'income') {
-          dailyMap[day].income += tx.amount;
+          dailyMap[txDay].income += tx.amount;
         } else {
-          dailyMap[day].expense += tx.amount;
+          dailyMap[txDay].expense += tx.amount;
         }
       }
     }
@@ -214,22 +262,20 @@ export default function App() {
     const netBalance = totalIncome - totalExpense;
     const savingsRate = totalIncome > 0 ? Math.max(0, Math.round((netBalance / totalIncome) * 100)) : 0;
 
-    const categoryBreakdown = Object.keys(catMap).map(category => {
-      const item = catMap[category];
-      const baseTotal = item.type === 'expense' ? totalExpense : totalIncome;
-      const percentage = baseTotal > 0 ? Math.round((item.amount / baseTotal) * 100) : 0;
+    const categoryBreakdown = Object.entries(catMap).map(([category, info]) => {
+      const base = info.type === 'income' ? totalIncome : totalExpense;
+      const percentage = base > 0 ? Math.round((info.amount / base) * 100) : 0;
       return {
         category,
-        amount: item.amount,
+        amount: info.amount,
         percentage,
-        type: item.type,
-        count: item.count,
+        type: info.type,
+        count: info.count,
       };
-    });
+    }).sort((a, b) => b.amount - a.amount);
 
-    const dailyBreakdown = Object.keys(dailyMap).map(dayStr => {
+    const dailyBreakdown = Object.entries(dailyMap).map(([dayStr, data]) => {
       const day = Number(dayStr);
-      const data = dailyMap[day];
       return {
         date: `${selectedMonth}-${String(day).padStart(2, '0')}`,
         day,
@@ -257,7 +303,7 @@ export default function App() {
       setAuthError(null);
       setAuthErrorCode(null);
       await signInWithPopup(auth, googleProvider);
-      addToast('success', 'เข้าสู่ระบบสำเร็จ ยินดีต้อนรับสู่ MonyDB');
+      addToast('success', 'เข้าสู่ระบบด้วย Google สำเร็จ ยินดีต้อนรับสู่ MonyDB');
     } catch (err: unknown) {
       console.error('Sign-in error:', err);
       const errDetail = formatAuthErrorMessage(err);
@@ -267,7 +313,7 @@ export default function App() {
     }
   };
 
-  // Handle Email Sign-in
+  // Handle Smart Email Sign-in (Auto register if not registered)
   const handleEmailSignIn = async (email: string, pass: string) => {
     try {
       setAuthError(null);
@@ -277,13 +323,32 @@ export default function App() {
     } catch (err: unknown) {
       console.error('Email sign-in error:', err);
       const errDetail = formatAuthErrorMessage(err);
+
+      // Smart auto-signup if user account doesn't exist yet
+      if (errDetail.code === 'auth/user-not-found' || errDetail.code === 'auth/invalid-credential') {
+        try {
+          const cred = await createUserWithEmailAndPassword(auth, email, pass);
+          const defaultName = email.split('@')[0];
+          await updateProfile(cred.user, { displayName: defaultName });
+          addToast('success', 'สร้างบัญชีผู้ใช้ใหม่และเข้าสู่ระบบสำเร็จ');
+          return;
+        } catch (signUpErr: unknown) {
+          console.error('Auto sign-up error:', signUpErr);
+          const signUpErrDetail = formatAuthErrorMessage(signUpErr);
+          setAuthError(signUpErrDetail.message);
+          setAuthErrorCode(signUpErrDetail.code || null);
+          addToast('error', signUpErrDetail.message);
+          return;
+        }
+      }
+
       setAuthError(errDetail.message);
       setAuthErrorCode(errDetail.code || null);
       addToast('error', errDetail.message);
     }
   };
 
-  // Handle Email Sign-up
+  // Handle Explicit Email Sign-up
   const handleEmailSignUp = async (email: string, pass: string, name?: string) => {
     try {
       setAuthError(null);
@@ -321,13 +386,36 @@ export default function App() {
     }
   };
 
+  // Handle Instant Local User Sign-in (Offline / Fast Access)
+  const handleLocalSignIn = (emailInput: string, name?: string) => {
+    const cleanEmail = emailInput.trim().toLowerCase();
+    const safeId = 'local_' + cleanEmail.replace(/[^a-zA-Z0-9]/g, '_');
+    const localUser: AppUser = {
+      uid: safeId,
+      email: cleanEmail,
+      displayName: name || cleanEmail.split('@')[0],
+      isLocal: true,
+    };
+    localStorage.setItem('monydb_local_user', JSON.stringify(localUser));
+    setUser(localUser);
+    setAuthError(null);
+    setAuthErrorCode(null);
+    addToast('success', `เข้าใช้งานสำเร็จด้วยอีเมล ${cleanEmail}`);
+  };
+
   // Handle Sign-out
   const handleSignOut = async () => {
     try {
-      await signOut(auth);
+      localStorage.removeItem('monydb_local_user');
+      if (auth.currentUser) {
+        await signOut(auth);
+      } else {
+        setUser(null);
+      }
       addToast('info', 'ออกจากระบบเรียบร้อยแล้ว');
     } catch (err) {
       console.error('Sign-out error:', err);
+      setUser(null);
     }
   };
 
@@ -342,8 +430,38 @@ export default function App() {
     if (!user) return;
     const nowIso = new Date().toISOString();
 
+    // A) If user is in Local Mode
+    if ('isLocal' in user && user.isLocal) {
+      if (editingTx) {
+        const updatedList = transactions.map(t =>
+          t.id === editingTx.id ? { ...t, ...data, updatedAt: nowIso } : t
+        );
+        setTransactions(updatedList);
+        localStorage.setItem(`monydb_tx_${user.uid}`, JSON.stringify(updatedList));
+        addToast('success', 'อัปเดตรายการเรียบร้อยแล้ว');
+        setEditingTx(null);
+      } else {
+        const newTx: Transaction = {
+          id: 'tx_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+          userId: user.uid,
+          type: data.type,
+          amount: data.amount,
+          category: data.category,
+          note: data.note,
+          date: data.date,
+          createdAt: nowIso,
+          updatedAt: nowIso,
+        };
+        const updatedList = [newTx, ...transactions];
+        setTransactions(updatedList);
+        localStorage.setItem(`monydb_tx_${user.uid}`, JSON.stringify(updatedList));
+        addToast('success', 'บันทึกรายการสำเร็จ');
+      }
+      return;
+    }
+
+    // B) If user is in Firebase Mode
     if (editingTx) {
-      // Update
       const docPath = `users/${user.uid}/transactions/${editingTx.id}`;
       try {
         await updateDoc(doc(db, 'users', user.uid, 'transactions', editingTx.id), {
@@ -361,7 +479,6 @@ export default function App() {
         handleFirestoreError(err, OperationType.UPDATE, docPath);
       }
     } else {
-      // Create
       const colPath = `users/${user.uid}/transactions`;
       try {
         await addDoc(collection(db, 'users', user.uid, 'transactions'), {
@@ -384,6 +501,15 @@ export default function App() {
   // Delete Transaction
   const handleDeleteTransaction = async (id: string) => {
     if (!user) return;
+
+    if ('isLocal' in user && user.isLocal) {
+      const updatedList = transactions.filter(t => t.id !== id);
+      setTransactions(updatedList);
+      localStorage.setItem(`monydb_tx_${user.uid}`, JSON.stringify(updatedList));
+      addToast('info', 'ลบรายการเรียบร้อยแล้ว');
+      return;
+    }
+
     const docPath = `users/${user.uid}/transactions/${id}`;
     try {
       await deleteDoc(doc(db, 'users', user.uid, 'transactions', id));
@@ -396,8 +522,23 @@ export default function App() {
   // Save Monthly Budget
   const handleSaveBudget = async (budgetAmount: number, savingsGoal: number) => {
     if (!user) return;
-    const docPath = `users/${user.uid}/budgets/${selectedMonth}`;
     const nowIso = new Date().toISOString();
+
+    if ('isLocal' in user && user.isLocal) {
+      const newBudget: MonthlyBudget = {
+        userId: user.uid,
+        month: selectedMonth,
+        budgetAmount,
+        savingsGoal,
+        updatedAt: nowIso,
+      };
+      setBudget(newBudget);
+      localStorage.setItem(`monydb_budget_${user.uid}_${selectedMonth}`, JSON.stringify(newBudget));
+      addToast('success', 'บันทึกงบประมาณประจำเดือนเรียบร้อย');
+      return;
+    }
+
+    const docPath = `users/${user.uid}/budgets/${selectedMonth}`;
     try {
       await setDoc(doc(db, 'users', user.uid, 'budgets', selectedMonth), {
         userId: user.uid,
@@ -412,7 +553,7 @@ export default function App() {
     }
   };
 
-  // Quick Seed Sample Data (Helpful for fresh databases)
+  // Quick Seed Sample Data (Helpful for fresh databases or testing)
   const handleAddSampleData = async () => {
     if (!user) return;
     const nowIso = new Date().toISOString();
@@ -427,6 +568,36 @@ export default function App() {
       { type: 'expense' as const, amount: 299, category: 'ความบันเทิงและสังสรรค์', note: 'ดูภาพยนตร์วันหยุด', day: '07' },
     ];
 
+    if ('isLocal' in user && user.isLocal) {
+      const newSampleTxs: Transaction[] = samples.map((item, idx) => ({
+        id: `sample_${Date.now()}_${idx}`,
+        userId: user.uid,
+        type: item.type,
+        amount: item.amount,
+        category: item.category,
+        note: item.note,
+        date: `${selectedMonth}-${item.day}`,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      }));
+      const merged = [...newSampleTxs, ...transactions];
+      setTransactions(merged);
+      localStorage.setItem(`monydb_tx_${user.uid}`, JSON.stringify(merged));
+      if (!budget) {
+        const defaultBudget: MonthlyBudget = {
+          userId: user.uid,
+          month: selectedMonth,
+          budgetAmount: 20000,
+          savingsGoal: 10000,
+          updatedAt: nowIso,
+        };
+        setBudget(defaultBudget);
+        localStorage.setItem(`monydb_budget_${user.uid}_${selectedMonth}`, JSON.stringify(defaultBudget));
+      }
+      addToast('success', 'เพิ่มชุดข้อมูลตัวอย่างเรียบร้อยแล้ว');
+      return;
+    }
+
     try {
       for (const item of samples) {
         await addDoc(collection(db, 'users', user.uid, 'transactions'), {
@@ -440,7 +611,6 @@ export default function App() {
           updatedAt: nowIso,
         });
       }
-      // Also set a default budget if not yet set
       if (!budget) {
         await setDoc(doc(db, 'users', user.uid, 'budgets', selectedMonth), {
           userId: user.uid,
@@ -455,6 +625,8 @@ export default function App() {
       handleFirestoreError(err, OperationType.CREATE, `users/${user.uid}/transactions`);
     }
   };
+
+  const isUserLocal = user && 'isLocal' in user && user.isLocal;
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col">
@@ -485,6 +657,7 @@ export default function App() {
             onEmailSignIn={handleEmailSignIn}
             onEmailSignUp={handleEmailSignUp}
             onDemoSignIn={handleDemoSignIn}
+            onLocalSignIn={handleLocalSignIn}
             loading={loadingAuth}
             error={authError}
             errorCode={authErrorCode}
@@ -498,30 +671,43 @@ export default function App() {
             {/* Top Bar for Logged-In User */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
-                  <Database className="w-4 h-4" />
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold ${
+                  isUserLocal ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'
+                }`}>
+                  {isUserLocal ? <Zap className="w-4 h-4" /> : <Database className="w-4 h-4" />}
                 </div>
                 <div>
-                  <h1 className="text-sm sm:text-base font-bold text-slate-900">
-                    ภาพรวมรายรับรายจ่ายประจำเดือน
-                  </h1>
+                  <div className="flex items-center gap-2">
+                    <h1 className="text-sm sm:text-base font-bold text-slate-900">
+                      ภาพรวมรายรับรายจ่ายประจำเดือน
+                    </h1>
+                    {isUserLocal && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                        Local Mode
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-slate-500">
-                    ซิงก์ข้อมูลอัตโนมัติกับฐานข้อมูล Firebase MonyDB แบบเรียลไทม์
+                    {isUserLocal
+                      ? `บัญชี: ${user.email} • จัดเก็บข้อมูลในเครื่องพร้อมใช้งานได้ทันที`
+                      : 'ซิงก์ข้อมูลอัตโนมัติกับฐานข้อมูล Firebase MonyDB แบบเรียลไทม์'}
                   </p>
                 </div>
               </div>
 
-              {/* Sample Data Quick Loader if empty */}
-              {monthTransactions.length === 0 && (
-                <button
-                  id="btn-add-sample-data"
-                  onClick={handleAddSampleData}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-xl border border-emerald-200 transition-colors self-start sm:self-auto"
-                >
-                  <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>โหลดข้อมูลตัวอย่างทดสอบ</span>
-                </button>
-              )}
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2">
+                {monthTransactions.length === 0 && (
+                  <button
+                    id="btn-add-sample-data"
+                    onClick={handleAddSampleData}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-xl border border-emerald-200 transition-colors"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>โหลดข้อมูลตัวอย่าง</span>
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* 1. Monthly KPI & Budget Overview */}
@@ -563,10 +749,10 @@ export default function App() {
       {/* Footer */}
       <footer className="py-6 border-t border-slate-200 text-center text-xs text-slate-500 bg-white">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <p>© 2026 MonyDB • ระบบจัดการรายรับรายจ่าย พร้อมระบบวิเคราะห์ข้อมูล</p>
+          <p>© 2026 MonyDB • ระบบจัดการรายรับรายจ่าย วิทยาลัยอาชีวศึกษาแพร่</p>
           <div className="flex items-center gap-1.5 text-slate-400">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span>เชื่อมต่อกับ Firestore: monydb</span>
+            <span className={`w-2 h-2 rounded-full ${isUserLocal ? 'bg-amber-500' : 'bg-emerald-500'} animate-pulse`} />
+            <span>{isUserLocal ? 'โหมดพร้อมใช้งานทันที (Local Mode)' : 'เชื่อมต่อกับ Firestore: monydb'}</span>
           </div>
         </div>
       </footer>
@@ -578,22 +764,23 @@ export default function App() {
           setIsTxModalOpen(false);
           setEditingTx(null);
         }}
-        onSubmit={handleSaveTransaction}
-        editData={editingTx}
-        defaultMonth={selectedMonth}
+        onSave={handleSaveTransaction}
+        editingTransaction={editingTx}
+        selectedMonth={selectedMonth}
       />
 
-      {/* Monthly Budget Modal */}
+      {/* Budget Modal */}
       <BudgetModal
         isOpen={isBudgetModalOpen}
         onClose={() => setIsBudgetModalOpen(false)}
+        onSave={handleSaveBudget}
+        currentBudget={budget?.budgetAmount}
+        currentSavingsGoal={budget?.savingsGoal}
         selectedMonth={selectedMonth}
-        currentBudget={budget}
-        onSaveBudget={handleSaveBudget}
       />
 
-      {/* Toast Notifications */}
-      <ToastContainer toasts={toasts} onDismiss={removeToast} />
+      {/* Toast Notification Container */}
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
     </div>
   );
 }

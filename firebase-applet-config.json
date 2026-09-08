@@ -1,12 +1,12 @@
 {
-  "projectId": "silken-iterator-bxjsq",
-  "appId": "1:200544966292:web:0c19d9a5beae27406a0681",
-  "apiKey": "AIzaSyA_bPbex4x7dD9jChZfpqmLFGe785u1ck4",
-  "authDomain": "silken-iterator-bxjsq.firebaseapp.com",
-  "firestoreDatabaseId": "monydb",
-  "storageBucket": "silken-iterator-bxjsq.firebasestorage.app",
-  "messagingSenderId": "200544966292",
+  "projectId": "moneydb-30fef",
+  "appId": "1:793906961496:web:05146d63cb8e7d3c25fe2d",
+  "apiKey": "AIzaSyDUjIIoEHLRolJHVxvxfZDxPBz8gzD68J4",
+  "authDomain": "moneydb-30fef.firebaseapp.com",
+  "firestoreDatabaseId": "(default)",
+  "storageBucket": "moneydb-30fef.firebasestorage.app",
+  "messagingSenderId": "793906961496",
   "measurementId": "",
-  "oAuthClientId": "200544966292-l55sml66kphp0vlh5so27knafqj3hl3d.apps.googleusercontent.com",
+  "oAuthClientId": "",
   "recaptchaSiteKey": ""
 }

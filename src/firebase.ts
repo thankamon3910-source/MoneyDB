@@ -64,21 +64,21 @@ export function formatAuthErrorMessage(error: unknown): {
 
   if (code === 'auth/operation-not-allowed') {
     return {
-      message: 'วิธีการเข้าสู่ระบบนี้ยังไม่เปิดใช้งานใน Firebase Console กรุณาเลือกวิธีอื่น เช่น ใช้อีเมล/รหัสผ่าน หรือทดลองใช้งานด่วน',
+      message: 'ผู้ให้บริการการเข้าสู่ระบบนี้ (เช่น Email/Password หรือ Anonymous) ยังไม่ได้เปิดใช้งานใน Firebase Console (เมนู Authentication -> Sign-in method)',
       code,
     };
   }
 
   if (code === 'auth/user-not-found') {
     return {
-      message: 'ไม่พบบัญชีผู้ใช้นี้ในระบบ กรุณากดสร้างบัญชีใหม่',
+      message: 'ไม่พบบัญชีผู้ใช้นี้ในระบบ Firebase กรุณากดสร้างบัญชีใหม่ หรือใช้โหมดเข้าใช้งานด่วน',
       code,
     };
   }
 
   if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
     return {
-      message: 'อีเมลหรือรหัสผ่านไม่ถูกต้อง กรุณาตรวจสอบอีกครั้ง',
+      message: 'อีเมลหรือรหัสผ่านไม่ถูกต้อง หรือยังไม่ได้สร้างบัญชีผู้ใช้นี้ใน Firebase กรุณาตรวจสอบหรือสร้างบัญชีใหม่',
       code,
     };
   }

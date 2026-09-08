@@ -13,9 +13,10 @@ import {
 } from 'lucide-react';
 import { formatThaiMonth } from '../constants/categories';
 import { CollegeLogo } from './CollegeLogo';
+import { AppUser } from '../types';
 
 interface Props {
-  user: User | null;
+  user: User | AppUser | null;
   selectedMonth: string; // YYYY-MM
   onMonthChange: (newMonth: string) => void;
   onOpenAddModal: () => void;
@@ -153,9 +154,16 @@ export const Navbar: React.FC<Props> = ({
                     </div>
                   )}
                   <div className="hidden lg:block text-left">
-                    <p className="text-xs font-semibold text-slate-900 truncate max-w-[130px]">
-                      {user.displayName || 'ผู้ใช้งาน'}
-                    </p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-xs font-semibold text-slate-900 truncate max-w-[120px]">
+                        {user.displayName || 'ผู้ใช้งาน'}
+                      </p>
+                      {'isLocal' in user && user.isLocal && (
+                        <span className="px-1.5 py-0.2 bg-amber-100 text-amber-800 border border-amber-300 rounded text-[9px] font-bold">
+                          Local
+                        </span>
+                      )}
+                    </div>
                     <p className="text-[11px] text-slate-500 truncate max-w-[130px]">
                       {user.email}
                     </p>

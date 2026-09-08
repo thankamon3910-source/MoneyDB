@@ -1,5 +1,14 @@
 export type TransactionType = 'income' | 'expense';
 
+export interface AppUser {
+  uid: string;
+  email?: string | null;
+  displayName?: string | null;
+  photoURL?: string | null;
+  isAnonymous?: boolean;
+  isLocal?: boolean;
+}
+
 export interface Transaction {
   id: string;
   userId: string;
