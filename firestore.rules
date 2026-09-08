@@ -32,7 +32,7 @@ service cloud.firestore {
     }
 
     function isVerifiedUser(userId) {
-      return isOwner(userId) && (request.auth.token.email_verified == true || request.auth.token.firebase.sign_in_provider == 'google.com');
+      return isOwner(userId);
     }
 
     function isValidTransaction(data, userId) {

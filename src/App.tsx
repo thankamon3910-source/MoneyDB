@@ -19,7 +19,12 @@ import {
   db,
   googleProvider,
   signInWithPopup,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signInAnonymously,
+  updateProfile,
   signOut,
+  formatAuthErrorMessage,
   testConnection,
   handleFirestoreError,
   OperationType
@@ -39,6 +44,7 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [authErrorCode, setAuthErrorCode] = useState<string | null>(null);
 
   // Current selected month: 'YYYY-MM'
   const [selectedMonth, setSelectedMonth] = useState<string>(() => {
@@ -249,13 +255,69 @@ export default function App() {
   const handleSignIn = async () => {
     try {
       setAuthError(null);
+      setAuthErrorCode(null);
       await signInWithPopup(auth, googleProvider);
       addToast('success', 'เข้าสู่ระบบสำเร็จ ยินดีต้อนรับสู่ MonyDB');
     } catch (err: unknown) {
       console.error('Sign-in error:', err);
-      const msg = err instanceof Error ? err.message : 'ไม่สามารถเข้าสู่ระบบได้';
-      setAuthError(msg);
-      addToast('error', 'การเข้าสู่ระบบล้มเหลว กรุณาลองใหม่อีกครั้ง');
+      const errDetail = formatAuthErrorMessage(err);
+      setAuthError(errDetail.message);
+      setAuthErrorCode(errDetail.code || null);
+      addToast('error', errDetail.message);
+    }
+  };
+
+  // Handle Email Sign-in
+  const handleEmailSignIn = async (email: string, pass: string) => {
+    try {
+      setAuthError(null);
+      setAuthErrorCode(null);
+      await signInWithEmailAndPassword(auth, email, pass);
+      addToast('success', 'เข้าสู่ระบบสำเร็จ ยินดีต้อนรับสู่ MonyDB');
+    } catch (err: unknown) {
+      console.error('Email sign-in error:', err);
+      const errDetail = formatAuthErrorMessage(err);
+      setAuthError(errDetail.message);
+      setAuthErrorCode(errDetail.code || null);
+      addToast('error', errDetail.message);
+    }
+  };
+
+  // Handle Email Sign-up
+  const handleEmailSignUp = async (email: string, pass: string, name?: string) => {
+    try {
+      setAuthError(null);
+      setAuthErrorCode(null);
+      const cred = await createUserWithEmailAndPassword(auth, email, pass);
+      if (name && cred.user) {
+        await updateProfile(cred.user, { displayName: name });
+      }
+      addToast('success', 'สร้างบัญชีและเข้าสู่ระบบสำเร็จ');
+    } catch (err: unknown) {
+      console.error('Email sign-up error:', err);
+      const errDetail = formatAuthErrorMessage(err);
+      setAuthError(errDetail.message);
+      setAuthErrorCode(errDetail.code || null);
+      addToast('error', errDetail.message);
+    }
+  };
+
+  // Handle Demo / Guest Sign-in
+  const handleDemoSignIn = async () => {
+    try {
+      setAuthError(null);
+      setAuthErrorCode(null);
+      const cred = await signInAnonymously(auth);
+      if (cred.user) {
+        await updateProfile(cred.user, { displayName: 'ผู้ใช้งานทั่วไป (ทดสอบ)' });
+      }
+      addToast('success', 'เข้าสู่ระบบโหมดทดสอบสำเร็จ (MonyDB พร้อมใช้งาน)');
+    } catch (err: unknown) {
+      console.error('Demo sign-in error:', err);
+      const errDetail = formatAuthErrorMessage(err);
+      setAuthError(errDetail.message);
+      setAuthErrorCode(errDetail.code || null);
+      addToast('error', errDetail.message);
     }
   };
 
@@ -420,8 +482,16 @@ export default function App() {
         ) : !user ? (
           <LoginView
             onSignIn={handleSignIn}
+            onEmailSignIn={handleEmailSignIn}
+            onEmailSignUp={handleEmailSignUp}
+            onDemoSignIn={handleDemoSignIn}
             loading={loadingAuth}
             error={authError}
+            errorCode={authErrorCode}
+            onClearError={() => {
+              setAuthError(null);
+              setAuthErrorCode(null);
+            }}
           />
         ) : (
           <div className="space-y-6">
