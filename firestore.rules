@@ -1,0 +1,75 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Ping doc for test connection
+    match /test/connection {
+      allow get: if true;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isVerifiedUser(userId) {
+      return isOwner(userId) && (request.auth.token.email_verified == true || request.auth.token.firebase.sign_in_provider == 'google.com');
+    }
+
+    function isValidTransaction(data, userId) {
+      return data.userId == userId &&
+        data.userId == request.auth.uid &&
+        (data.type == 'income' || data.type == 'expense') &&
+        data.amount is number && data.amount > 0 && data.amount <= 1000000000 &&
+        data.category is string && data.category.size() > 0 && data.category.size() <= 64 &&
+        (!('note' in data) || (data.note is string && data.note.size() <= 500)) &&
+        data.date is string && data.date.size() == 10 &&
+        (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 64)) &&
+        (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 64));
+    }
+
+    function isValidBudget(data, userId) {
+      return data.userId == userId &&
+        data.userId == request.auth.uid &&
+        data.month is string && data.month.size() == 7 &&
+        data.budgetAmount is number && data.budgetAmount >= 0 && data.budgetAmount <= 1000000000 &&
+        (!('savingsGoal' in data) || (data.savingsGoal is number && data.savingsGoal >= 0 && data.savingsGoal <= 1000000000)) &&
+        (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 64));
+    }
+
+    match /users/{userId}/transactions/{transactionId} {
+      allow get: if isValidId(userId) && isValidId(transactionId) && isOwner(userId);
+      allow list: if isValidId(userId) && isOwner(userId);
+      allow create: if isValidId(userId) && isValidId(transactionId) && isVerifiedUser(userId) && isValidTransaction(incoming(), userId);
+      allow update: if isValidId(userId) && isValidId(transactionId) && isVerifiedUser(userId) && isValidTransaction(incoming(), userId) && incoming().userId == existing().userId;
+      allow delete: if isValidId(userId) && isValidId(transactionId) && isVerifiedUser(userId);
+    }
+
+    match /users/{userId}/budgets/{monthId} {
+      allow get: if isValidId(userId) && isValidId(monthId) && isOwner(userId);
+      allow list: if isValidId(userId) && isOwner(userId);
+      allow create: if isValidId(userId) && isValidId(monthId) && isVerifiedUser(userId) && isValidBudget(incoming(), userId);
+      allow update: if isValidId(userId) && isValidId(monthId) && isVerifiedUser(userId) && isValidBudget(incoming(), userId) && incoming().userId == existing().userId;
+      allow delete: if isValidId(userId) && isValidId(monthId) && isVerifiedUser(userId);
+    }
+  }
+}

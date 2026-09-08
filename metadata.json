@@ -1,0 +1,6 @@
+{
+  "name": "MonyDB - บันทึกรายรับรายจ่าย",
+  "description": "เว็บแอปพลิเคชันจัดการรายรับรายจ่าย สรุปผลแบบรายเดือนพร้อมกราฟวิเคราะห์ข้อมูล และบันทึกข้อมูลบน Firebase MonyDB ด้วยการเข้าสู่ระบบผ่าน Google Account",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

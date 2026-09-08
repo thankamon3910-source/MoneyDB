@@ -1,0 +1,92 @@
+{
+  "entities": {
+    "Transaction": {
+      "title": "Transaction",
+      "description": "An income or expense transaction record",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner user ID matching auth.uid",
+          "maxLength": 128
+        },
+        "type": {
+          "type": "string",
+          "description": "Type of transaction (income or expense)",
+          "enum": ["income", "expense"]
+        },
+        "amount": {
+          "type": "number",
+          "description": "Transaction amount in THB"
+        },
+        "category": {
+          "type": "string",
+          "description": "Transaction category",
+          "maxLength": 64
+        },
+        "note": {
+          "type": "string",
+          "description": "Optional memo or description",
+          "maxLength": 500
+        },
+        "date": {
+          "type": "string",
+          "description": "Date of transaction in YYYY-MM-DD format",
+          "maxLength": 10
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Creation timestamp",
+          "maxLength": 64
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Update timestamp",
+          "maxLength": 64
+        }
+      },
+      "required": ["userId", "type", "amount", "category", "date"]
+    },
+    "MonthlyBudget": {
+      "title": "MonthlyBudget",
+      "description": "Monthly budget and savings target for a user",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner user ID matching auth.uid",
+          "maxLength": 128
+        },
+        "month": {
+          "type": "string",
+          "description": "Month in YYYY-MM format",
+          "maxLength": 7
+        },
+        "budgetAmount": {
+          "type": "number",
+          "description": "Target expense budget for the month"
+        },
+        "savingsGoal": {
+          "type": "number",
+          "description": "Target savings goal for the month"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Update timestamp",
+          "maxLength": 64
+        }
+      },
+      "required": ["userId", "month", "budgetAmount"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "Transactions belonging to a specific user"
+    },
+    "/users/{userId}/budgets/{monthId}": {
+      "schema": "MonthlyBudget",
+      "description": "Monthly budget configurations belonging to a specific user"
+    }
+  }
+}
